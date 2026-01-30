@@ -1,4 +1,4 @@
-﻿using NServiceBus.Configuration.AdvancedExtensibility;
+﻿﻿using NServiceBus.Configuration.AdvancedExtensibility;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
@@ -12,6 +12,7 @@ static class OpenTelemetryExtensions
     public static void EnableOpenTelemetryMetrics(this EndpointConfiguration endpointConfiguration)
     {
         var endpointName = endpointConfiguration.GetSettings().EndpointName();
+
         var attributes = new Dictionary<string, object>
         {
             ["service.name"] = endpointName,
@@ -31,8 +32,6 @@ static class OpenTelemetryExtensions
                 cfg.Protocol = OtlpExportProtocol.HttpProtobuf;
             })
             .Build();
-
-        endpointConfiguration.EnableOpenTelemetry();
     }
 
     public static void EnableOpenTelemetryTracing(this EndpointConfiguration endpointConfiguration)
@@ -57,13 +56,10 @@ static class OpenTelemetryExtensions
                 cfg.Protocol = OtlpExportProtocol.HttpProtobuf;
             })
             .Build();
-
-        endpointConfiguration.EnableOpenTelemetry();
     }
 
     const string OtlpMetricsDefaultUrl = "http://localhost:5318/v1/metrics";
-    const string OtlpTracesDefaultUrl = "http://localhost:4318/v1/traces";
+    const string OtlpTracesDefaultUrl = "http://localhost:5318/v1/traces";
     const string OtlpMetricsUrlEnvVar = "OTLP_METRICS_URL";
     const string OtlpTracesUrlEnvVar = "OTLP_TRACING_URL";
-
 }

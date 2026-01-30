@@ -1,0 +1,204 @@
+name: loanbroker
+services:
+  # The emulator is a distro-less container and doesn't have a built-in health check,
+  # so we add a sidecar container to check its health and make the other containers depend on it.
+  servicebus-emulator-check:
+    image: alpine:latest
+    command: >
+      sh -c "while true; do sleep 3600; done"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "servicebus-emulator.local", "5300"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      - servicebus-emulator
+    networks:
+      - ls
+  servicebus-emulator:
+    profiles: ['', infrastructure]
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
+    ports:
+      - "5672:5672"
+      - "5300:5300"
+    environment:
+      ACCEPT_EULA: Y
+      SQL_SERVER: sqlserver
+      MSSQL_SA_PASSWORD: YourStrong@Passw0rd
+      EMULATOR_HTTP_PORT: 5300
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      ls:
+        aliases: ["servicebus-emulator.local"]
+  sqlserver:
+    profiles: ['', infrastructure]
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: Y
+      MSSQL_SA_PASSWORD: YourStrong@Passw0rd
+      MSSQL_PID: Developer
+      MSSQL_COLLATION: SQL_Latin1_General_CP1_CI_AS
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+      - ./src/sqlserver/init-db.sh:/var/opt/mssql/init-db.sh
+    command: bash -c "/var/opt/mssql/init-db.sh"
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -C -Q "IF DB_ID('NServiceBus') IS NOT NULL AND DATABASEPROPERTYEX('NServiceBus','Status') = 'ONLINE' SELECT 1 ELSE THROW 50000, 'Healthcheck failed', 1"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - ls      
+  creditbureau:
+    profiles: ['', infrastructure]
+    build:
+      context: ./
+      dockerfile: ./src/CreditBureau/Dockerfile
+    ports:
+      - "7071:80"
+    networks:
+      - ls
+  loan-broker:
+    profiles: ['']
+    build:
+      context: ./
+      dockerfile: ./src/LoanBroker/Dockerfile
+    env_file:
+      - env/metrics.env
+      - env/azure-local.env
+    depends_on:
+      servicebus-emulator-check:
+        condition: service_healthy
+    networks:
+      - ls
+  bank1:
+    profiles: ['']
+    build:
+      context: ./
+      dockerfile: ./src/Bank1Adapter/Dockerfile
+    env_file:
+      - env/metrics.env
+      - env/azure-local.env
+    depends_on:
+      servicebus-emulator-check:
+        condition: service_healthy
+    networks:
+      - ls
+# Bank2 is excluded from this compose file because it puts us over the 10 connection limit for the Azure Service Bus Emulator.
+# Bank3 was kept in because it fails 1/3 of the time.
+#  bank2:
+#    profiles: ['']
+#    build:
+#      context: ./
+#      dockerfile: ./src/Bank2Adapter/Dockerfile
+#    env_file:
+#      - env/metrics.env
+#      - env/azure-local.env
+#    depends_on:
+#      servicebus-emulator-check:
+#        condition: service_healthy
+#    networks:
+#      - ls
+  bank3:
+    profiles: ['']
+    build:
+      context: ./
+      dockerfile: ./src/Bank3Adapter/Dockerfile
+    env_file:
+      - env/metrics.env
+      - env/azure-local.env
+    depends_on:
+      servicebus-emulator-check:
+        condition: service_healthy
+    networks:
+      - ls
+  email-sender:
+    profiles: ['']
+    build:
+      context: ./
+      dockerfile: ./src/EmailSender/Dockerfile
+    env_file:
+      - env/metrics.env
+      - env/azure-local.env
+    depends_on:
+      servicebus-emulator-check:
+        condition: service_healthy
+    networks:
+      - ls
+  client:
+    profiles: ['']
+    build:
+      context: ./
+      dockerfile: ./src/Client/Dockerfile
+    env_file:
+      - env/metrics.env
+      - env/azure-local.env
+    depends_on:
+      servicebus-emulator-check:
+        condition: service_healthy
+    networks:
+      - ls
+    tty: true
+    stdin_open: true
+    command: --demo
+  otel-collector:
+    profiles: [ '', infrastructure ]
+    image: otel/opentelemetry-collector-contrib:0.102.1
+    command: [ "--config=/etc/otelcol-contrib/config.yaml" ]
+    volumes:
+      - ./src/otel/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "5318:5318"
+      - "1234:1234"
+    networks:
+      - ls
+  prometheus:
+    profiles: ['', infrastructure]
+    image: docker.io/prom/prometheus:v2.53.2
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./src/prometheus/:/etc/prometheus/
+      - prometheus-data:/prometheus
+    command: --web.enable-lifecycle --config.file=/etc/prometheus/prometheus.yml
+    networks:
+      - ls
+  grafana:
+    profiles: ['', infrastructure]
+    image: docker.io/grafana/grafana-oss:latest
+    ports:
+      - '3000:3000'
+    restart: unless-stopped
+    volumes:
+      - ./src/grafana/provisioning/:/etc/grafana/provisioning/
+      - ./src/grafana/dashboards/:/var/lib/grafana/dashboards/
+      - grafana-data:/var/lib/grafana
+    networks:
+      - ls
+  jaeger:
+    profiles: ['', infrastructure]
+    image: docker.io/jaegertracing/all-in-one:latest
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - 16686:16686
+    volumes:
+      - jaeger-data:/tmp
+    networks:
+      - ls
+networks:
+  ls:
+    ipam:
+      config:
+        - subnet: 10.0.2.0/24
+volumes:
+  grafana-data:
+  prometheus-data:
+  jaeger-data:
+  sqlserver-data:

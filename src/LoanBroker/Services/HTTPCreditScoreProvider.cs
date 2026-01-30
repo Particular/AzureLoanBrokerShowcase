@@ -1,31 +1,40 @@
 ﻿using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 using ClientMessages;
+using Microsoft.Extensions.Logging;
 
 namespace LoanBroker.Services;
 
-public class HTTPCreditScoreProvider : ICreditScoreProvider
+public class HTTPCreditScoreProvider(ILogger<HTTPCreditScoreProvider> logger) : ICreditScoreProvider
 {
-    readonly string lambdaUrl = Environment.GetEnvironmentVariable("LAMBDA_URL")
-                                ?? "https://score.lambda-url.us-east-1.localhost.localstack.cloud:4566";
+    readonly string? functionUrl = Environment.GetEnvironmentVariable("CREDIT_BUREAU_URL");
+    readonly HttpClient httpClient = new();
 
     public async Task<int> Score(Prospect prospect, string requestId)
     {
-        using var httpClient = CreateHttpClient();
-        var requestRecord = new ScoreRequest(prospect.SSN, requestId);
-        var httpResponseMessage = await httpClient.PostAsync(lambdaUrl, JsonContent.Create(requestRecord));
-        var scoreResponse = await httpResponseMessage.Content.ReadFromJsonAsync<ScoreResponse>();
-        return scoreResponse!.score;
-    }
+        ArgumentException.ThrowIfNullOrWhiteSpace(functionUrl);
 
-    HttpClient CreateHttpClient()
-    {
-        var handler = new HttpClientHandler();
-        // Workaround for certification validation failing on Linux
-        handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true;
-        return new HttpClient(handler);
+        var requestRecord = new ScoreRequest(prospect.SSN, requestId);
+
+        logger.LogInformation($"Sending request to credit bureau via {functionUrl}");
+
+        using var httpResponseMessage = await httpClient.PostAsJsonAsync(functionUrl, requestRecord);
+
+        httpResponseMessage.EnsureSuccessStatusCode();
+
+        var scoreResponse = await httpResponseMessage.Content.ReadFromJsonAsync<ScoreResponse>()
+            ?? throw new InvalidOperationException("Credit bureau returned an empty response");
+
+        return scoreResponse.Score;
     }
 }
 
-record ScoreRequest(string SSN, string requestId);
+public record ScoreRequest(
+    [property: JsonPropertyName("ssn")] string SSN,
+    [property: JsonPropertyName("requestId")] string RequestId);
 
-record ScoreResponse(int score);
+public record ScoreResponse(
+    [property: JsonPropertyName("score")] int Score,
+    [property: JsonPropertyName("history")] int History,
+    [property: JsonPropertyName("SSN")] string SSN,
+    [property: JsonPropertyName("request_id")] string RequestId);

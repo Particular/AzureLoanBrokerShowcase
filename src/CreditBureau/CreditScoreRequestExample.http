@@ -1,0 +1,5 @@
+﻿// Request a credit score
+POST http://localhost:7071/api/score HTTP/1.1
+Content-Type: application/json
+
+{ "ssn" : "123-12-1234", "requestId": "12345" }

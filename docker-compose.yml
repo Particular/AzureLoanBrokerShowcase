@@ -1,23 +1,36 @@
 name: loanbroker
 services:
-  localstack:
+  sqlserver:
     profiles: ['', infrastructure]
-    image: docker.io/localstack/localstack:3
-    environment:
-      - SERVICES=sns,sqs,iam,s3,dynamodb,lambda,cloudwatch
-      - DEBUG=1
-      - EDGE_PORT=4566
-      - DISABLE_CORS_CHECKS=1
+    image: mcr.microsoft.com/mssql/server:2025-latest
     ports:
-      - '4566-4597:4566-4597'
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: Y
+      MSSQL_SA_PASSWORD: YourStrong@Passw0rd
+      MSSQL_PID: Developer
+      MSSQL_COLLATION: SQL_Latin1_General_CP1_CI_AS
     volumes:
-      - ./lambdas:/var/lib/lambdas
-      - ./localstack:/etc/localstack/init/ready.d
-      - localstack:/var/lib/localstack
-      - /var/run/docker.sock:/var/run/docker.sock
+      - sqlserver-data:/var/opt/mssql
+      - ./src/sqlserver/init-db.sh:/var/opt/mssql/init-db.sh
+    command: bash -c "/var/opt/mssql/init-db.sh"
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -C -Q "IF DB_ID('NServiceBus') IS NOT NULL AND DATABASEPROPERTYEX('NServiceBus','Status') = 'ONLINE' SELECT 1 ELSE THROW 50000, 'Healthcheck failed', 1"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
     networks:
-      ls:
-        ipv4_address: 10.0.2.20
+      - ls
+  creditbureau:
+    profiles: ['', infrastructure]
+    build:
+      context: ./
+      dockerfile: ./src/CreditBureau/Dockerfile
+    ports:
+      - "7071:80"
+    networks:
+      - ls
   loan-broker:
     profiles: ['']
     build:
@@ -25,14 +38,14 @@ services:
       dockerfile: ./src/LoanBroker/Dockerfile
     env_file:
       - env/metrics.env
-      - env/aws.env
+      - env/azure.env
+    environment:
+      AZURE_SERVICE_BUS_CONNECTION_STRING: ${AZURE_SERVICE_BUS_CONNECTION_STRING:?AZURE_SERVICE_BUS_CONNECTION_STRING must be set in .env}
     depends_on:
-      localstack:
-        condition: service_healthy
+      creditbureau:
+        condition: service_started
       servicepulse:
         condition: service_started
-    dns:
-      - 10.0.2.20
     networks:
       - ls
   bank1:
@@ -42,14 +55,12 @@ services:
       dockerfile: ./src/Bank1Adapter/Dockerfile
     env_file:
       - env/metrics.env
-      - env/aws.env
+      - env/azure.env
+    environment:
+      AZURE_SERVICE_BUS_CONNECTION_STRING: ${AZURE_SERVICE_BUS_CONNECTION_STRING:?AZURE_SERVICE_BUS_CONNECTION_STRING must be set in .env}
     depends_on:
-      localstack:
-        condition: service_healthy
       servicepulse:
         condition: service_started
-    dns:
-      - 10.0.2.20
     networks:
       - ls
   bank2:
@@ -59,14 +70,12 @@ services:
       dockerfile: ./src/Bank2Adapter/Dockerfile
     env_file:
       - env/metrics.env
-      - env/aws.env
+      - env/azure.env
+    environment:
+      AZURE_SERVICE_BUS_CONNECTION_STRING: ${AZURE_SERVICE_BUS_CONNECTION_STRING:?AZURE_SERVICE_BUS_CONNECTION_STRING must be set in .env}
     depends_on:
-      localstack:
-        condition: service_healthy
       servicepulse:
         condition: service_started
-    dns:
-      - 10.0.2.20
     networks:
       - ls
   bank3:
@@ -76,14 +85,12 @@ services:
       dockerfile: ./src/Bank3Adapter/Dockerfile
     env_file:
       - env/metrics.env
-      - env/aws.env
+      - env/azure.env
+    environment:
+      AZURE_SERVICE_BUS_CONNECTION_STRING: ${AZURE_SERVICE_BUS_CONNECTION_STRING:?AZURE_SERVICE_BUS_CONNECTION_STRING must be set in .env}
     depends_on:
-      localstack:
-        condition: service_healthy
       servicepulse:
         condition: service_started
-    dns:
-      - 10.0.2.20
     networks:
       - ls
   email-sender:
@@ -93,14 +100,12 @@ services:
       dockerfile: ./src/EmailSender/Dockerfile
     env_file:
       - env/metrics.env
-      - env/aws.env
+      - env/azure.env
+    environment:
+      AZURE_SERVICE_BUS_CONNECTION_STRING: ${AZURE_SERVICE_BUS_CONNECTION_STRING:?AZURE_SERVICE_BUS_CONNECTION_STRING must be set in .env}
     depends_on:
-      localstack:
-        condition: service_healthy
       servicepulse:
         condition: service_started
-    dns:
-      - 10.0.2.20
     networks:
       - ls
   client:
@@ -110,21 +115,31 @@ services:
       dockerfile: ./src/Client/Dockerfile
     env_file:
       - env/metrics.env
-      - env/aws.env
+      - env/azure.env
+    environment:
+      AZURE_SERVICE_BUS_CONNECTION_STRING: ${AZURE_SERVICE_BUS_CONNECTION_STRING:?AZURE_SERVICE_BUS_CONNECTION_STRING must be set in .env}
     depends_on:
-      localstack:
-        condition: service_healthy
       servicepulse:
         condition: service_started
       loan-broker:
         condition: service_started
-    dns:
-      - 10.0.2.20
     networks:
       - ls
     tty: true
     stdin_open: true
     command: --demo
+  otel-collector:
+    profiles: [ '', infrastructure ]
+    image: otel/opentelemetry-collector-contrib:0.102.1
+    command: [ "--config=/etc/otelcol-contrib/config.yaml" ]
+    volumes:
+      - ./src/otel/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "5318:5318"
+      - "1234:1234"
+    networks:
+      - ls
   prometheus:
     profiles: ['', infrastructure]
     image: docker.io/prom/prometheus:v2.53.2
@@ -155,50 +170,27 @@ services:
       - COLLECTOR_OTLP_ENABLED=true
     ports:
       - 16686:16686
-      - 4318:4318
-      - 9411:9411
-      - 14250
     volumes:
       - jaeger-data:/tmp
-    networks:
-      - ls
-  adot:
-    profiles: ['', infrastructure]
-    image: docker.io/amazon/aws-otel-collector
-    env_file:
-      - env/aws.env
-    command: [ "--config=/etc/otel-agent-config.yaml" ]
-    ports:
-      - "13133:13133"     # adot health_check
-      - "5318:5318"       # adot
-      - "1234:1234"       # adot
-    volumes:
-      - ./src/adot/config.yaml:/etc/otel-agent-config.yaml
     networks:
       - ls
   servicecontrol:
     profiles: ['', infrastructure]
     image: docker.io/particular/servicecontrol:latest
     env_file:
-      - env/aws.env
       - env/service-platform.env
     ports:
       - "33333:33333"
     environment:
       RAVENDB_CONNECTIONSTRING: http://servicecontrol-db:8080
       REMOTEINSTANCES: '[{"api_uri":"http://servicecontrol-audit:44444/api"}]'
+      SERVICECONTROL_CONNECTIONSTRING: ${AZURE_SERVICE_BUS_CONNECTION_STRING:?AZURE_SERVICE_BUS_CONNECTION_STRING must be set in .env}
       SERVICECONTROL_ALLOWMESSAGEEDITING: 'true'
     command: --setup-and-run
     restart: unless-stopped
     depends_on:
       servicecontrol-db:
         condition: service_healthy
-      servicecontrol-audit:
-        condition: service_healthy
-      localstack:
-        condition: service_healthy
-    dns:
-      - 10.0.2.20
     networks:
       - ls
   servicecontrol-db:
@@ -206,47 +198,52 @@ services:
     image: docker.io/particular/servicecontrol-ravendb:latest
     ports:
       - "8080:8080"
+    environment:
+      - RAVEN_ARGS=--Setup.Mode=None
+      - RAVEN_Security_UnsecuredAccessAllowed=PublicNetwork
     volumes:
       - servicecontrol-db:/var/lib/ravendb/data
       - servicecontrol-db-config:/var/lib/ravendb/config
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/studio/index.html || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     networks:
       - ls
   servicecontrol-audit:
     profiles: ['', infrastructure]
     image: docker.io/particular/servicecontrol-audit:latest
     env_file:
-      - env/aws.env
       - env/service-platform.env
     ports:
       - "44444:44444"
     environment:
       RAVENDB_CONNECTIONSTRING: http://servicecontrol-db:8080
+      SERVICECONTROL_AUDIT_CONNECTIONSTRING: ${AZURE_SERVICE_BUS_CONNECTION_STRING:?AZURE_SERVICE_BUS_CONNECTION_STRING must be set in .env}
+      SERVICECONTROL_AUDIT_SERVICECONTROLQUEUEADDRESS: Particular.ServiceControl
     command: --setup-and-run
     restart: unless-stopped
     depends_on:
       servicecontrol-db:
         condition: service_healthy
-      localstack:
-        condition: service_healthy
-    dns:
-      - 10.0.2.20
     networks:
       - ls
   servicecontrol-monitoring:
     profiles: ['', infrastructure]
     image: docker.io/particular/servicecontrol-monitoring:latest
     env_file:
-      - env/aws.env
       - env/service-platform.env
     restart: unless-stopped
     command: --setup-and-run
     ports:
       - "33633:33633"
+    environment:
+      MONITORING_CONNECTIONSTRING: ${AZURE_SERVICE_BUS_CONNECTION_STRING:?AZURE_SERVICE_BUS_CONNECTION_STRING must be set in .env}
     depends_on:
-      localstack:
+      servicecontrol-db:
         condition: service_healthy
-    dns:
-      - 10.0.2.20
     networks:
       - ls
   servicepulse:
@@ -263,8 +260,6 @@ services:
         condition: service_healthy
       servicecontrol-monitoring:
         condition: service_healthy
-      localstack:
-        condition: service_healthy
     networks:
       - ls
 networks:
@@ -273,9 +268,9 @@ networks:
       config:
         - subnet: 10.0.2.0/24
 volumes:
-  localstack:
   grafana-data:
   prometheus-data:
   jaeger-data:
   servicecontrol-db:
   servicecontrol-db-config:
+  sqlserver-data:

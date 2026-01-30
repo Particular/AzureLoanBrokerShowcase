@@ -142,10 +142,5 @@ public class BestLoanPolicyScenarioTests
         Assert.That(handleResult.Context.SentMessages, Is.Empty);
     }
 
-    class FixedCreditScorer(int score) : ICreditScoreProvider
-    {
-        public Task<int> Score(Prospect prospect, string requestId) => Task.FromResult(score);
-    }
-
     static readonly ILogger<BestLoanPolicy> log = new NullLogger<BestLoanPolicy>();
 }

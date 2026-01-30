@@ -13,6 +13,7 @@ public class QuoteRequestedHandler(ILogger<QuoteRequestedHandler> logger) : IHan
         await Task.Delay(Random.Shared.Next(0, 5000), context.CancellationToken);
 
         logger.LogInformation($"Quote request with ID {message.RequestId}. Details: number of years {message.NumberOfYears}, amount: {message.Amount}, credit score: {message.Score}");
+
         if (message is { Score: < 600, Amount: > 1_000_000 })
         {
             var quoteRejected = new QuoteRequestRefusedByBank(message.RequestId, BankIdentifier);

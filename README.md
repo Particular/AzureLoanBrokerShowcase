@@ -1,18 +1,17 @@
-# AWS LoanBroker example
+# Azure LoanBroker Showcase
 
-The AWS LoanBroker example is a basic loan broker implementation following the [structure presented](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ComposedMessagingExample.html) by [Gregor Hohpe](https://www.enterpriseintegrationpatterns.com/gregor.html) in his [Enterprise Integration Pattern](https://www.enterpriseintegrationpatterns.com/) book.
+The Azure LoanBroker showcase is a comprehensive loan broker implementation following the [structure presented](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ComposedMessagingExample.html) by [Gregor Hohpe](https://www.enterpriseintegrationpatterns.com/gregor.html) in his [Enterprise Integration Pattern](https://www.enterpriseintegrationpatterns.com/) book.
 
 > [!Note]
-> The showcase, by default, runs locally using LocalStack, and no AWS account is needed. The [how to run the example](#how-to-run-the-example) section details how to configure the solution to connect to AWS services.
+> The showcase runs locally using Docker, however, due to connection limitations with the Azure Service Bus Emulator, an Azure account is needed for the default setup. The [how to run the example](#how-to-run-the-example) section details how to configure the solution to connect to Azure services. A separate Docker Compose file is available for running the solution using the Azure Service Bus Emulator, but this is a cut down version of the showcase that does not demonstrate the full functionality of NServiceBus.
 
 This is the logical architecture:
 
 ![Logical architecture](https://github.com/user-attachments/assets/5f2ef8b0-c7d4-4cef-ab7b-a8561cbd3282)
 
-And this is how that is represented using AWS services:
+And this is how that is represented using Azure services running locally:
 
-![AWS Architectural Diagram](img/architecture-view.png)
-
+![Azure Architectural Diagram](img/architecture-view.png)
 ## What's in the box
 
 The example is composed by:
@@ -29,20 +28,23 @@ The example also ships the following monitoring services:
 - A Prometheus instance to collect, store, and query raw metrics data.
 - A Grafana instance with three different metrics dashboards using Prometheus as the data source.
 - A Jaeger instance to visualize OpenTelemetry traces.
-- AWS Distro for OpenTelemetry collector (ADOT) to collect and export metrics and traces to various destinations.
-
-The example also exports metrics and traces to AWS CloudWatch and XRay.
+- OpenTelemetry collector to collect and export metrics and traces to various destinations.
 
 ## Requirements
 
-- .NET 8 or greater
+- .NET 10 or greater
 - Docker
 - Docker Compose
 
 ## How to run the example
 
 The simplest way to run the example is using Docker for both the endpoints and the infrastructure.
-The client application, the loan broker service, the e-mail sender, and the bank adapters can be deployed as Docker containers alongside the Particular platform to monitor the system, LocalStack to mock the AWS services, and the additional containers needed for enabling OpenTelemetry observability.
+The client application, the loan broker service, the e-mail sender, and the bank adapters can be deployed as Docker containers alongside the Particular platform to monitor the system, Azure Service Bus for messaging, SQL Server for persistence, and the additional containers needed for enabling OpenTelemetry observability.
+
+Before running the complete example in Docker, create a local `.env` file from `.env.example` in the root folder and set `AZURE_SERVICE_BUS_CONNECTION_STRING` with your Azure Service Bus connection string.
+
+> [!NOTE]
+> The `.env` file is local only and should not be committed.
 
 To run the complete example in Docker, execute the following command from the root folder:
 
@@ -53,7 +55,7 @@ docker compose up --build -d
 > [!TIP]
 > Once the project is running, check out the [Things to try](#things-to-try) section.
 
-The above command will build all projects, build container images, deploy them to the local Docker registry, and start them. The Docker Compose command will also run and configure all the additional infrastructural containers.
+The above command will build all projects, build container images locally, and start them. The Docker Compose command will also run and configure all the additional infrastructural containers.
 
 To stop the running solution and remove all deployed containers. Using a command prompt, execute the following command:
 
@@ -67,13 +69,22 @@ To run the solution without rebuilding container images, execute the following c
 docker compose up -d
 ```
 
-> [!Note]
-> To run transport and persistence using AWS services instead of LocalStack:
-> - remove the `AWS_ENDPOINT_URL` variable from the [aws.env](env/aws.env) file
-> - ensure the following environment variables are defined with appropriate values:
->   - `AWS_ACCESS_KEY_ID`
->   - `AWS_SECRET_ACCESS_KEY`
->   - `AWS_REGION`
+### Running with Azure Service Bus Emulator
+
+To run the cut down version of the showcase with the Azure Service Bus Emulator, execute the following command from the root folder:
+
+```shell
+docker compose -f docker-compose-ASB-emulator.yml up --build -d
+```
+
+To stop the emulator-based solution and remove all deployed containers, execute the following command:
+
+```shell
+docker compose -f docker-compose-ASB-emulator.yml down
+```
+
+> [!NOTE]
+> The emulator-based setup is a cut down version of the showcase and excludes Bank2 due to the Azure Service Bus Emulator connection limits. Microsoft has confirmed there are currently no plans to increase these limits: https://github.com/Azure/azure-service-bus-emulator-installer/issues/58#issuecomment-2984760245
 
 ### Running endpoints from the IDE
 

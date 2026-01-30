@@ -8,5 +8,5 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets:
-        - 'adot:1234'
+        - 'otel-collector:1234'
         - 'localhost:1234'

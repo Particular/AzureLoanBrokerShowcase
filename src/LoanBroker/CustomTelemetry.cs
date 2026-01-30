@@ -8,7 +8,7 @@ static class CustomTelemetry
 
     public static readonly Histogram<double> BankResponseTime = LoanBrokerMeter.CreateHistogram<double>(
         name: "loan_broker.bank_processing_time",
-        unit: "s",
+        unit: "ms",
         description: "The time banks take to respond to quote requests.");
 
 }

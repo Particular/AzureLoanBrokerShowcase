@@ -1,8 +1,11 @@
-﻿using Microsoft.Extensions.Hosting;
+using Azure.Monitor.OpenTelemetry.Exporter;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using NLog.Extensions.Logging;
 using NServiceBus.Extensions.Logging;
 using NServiceBus.Logging;
-
+using OpenTelemetry.Resources;
 
 namespace CommonConfigurations;
 
@@ -10,29 +13,50 @@ public record Customizations(EndpointConfiguration EndpointConfiguration, Routin
 
 public static class SharedConventions
 {
-    public static HostApplicationBuilder ConfigureAwsNServiceBusEndpoint(this HostApplicationBuilder builder, string endpointName, Action<Customizations>? customize = null)
+    public static HostApplicationBuilder ConfigureAzureNServiceBusEndpoint(this HostApplicationBuilder builder, string endpointName,
+        Action<Customizations>? customize = null)
     {
         ConfigureMicrosoftLoggingIntegration();
 
         var endpointConfiguration = new EndpointConfiguration(endpointName);
 
-        // Configure SQS Transport
-        var transport = new SqsTransport();
+        // Configure Azure Transport
+        var serviceBusConnectionString = Environment.GetEnvironmentVariable("AZURE_SERVICE_BUS_CONNECTION_STRING");
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceBusConnectionString);
+
+        var transport = new AzureServiceBusTransport(serviceBusConnectionString, TopicTopology.Default)
+        {
+            TransportTransactionMode = TransportTransactionMode.ReceiveOnly
+        };
+
         var routing = endpointConfiguration.UseTransport(transport);
 
-        // Configure DynamoDB Persistence
-        var persistence = endpointConfiguration.UsePersistence<DynamoPersistence>();
-        persistence.Sagas().UsePessimisticLocking = true;
+        // Configure SQL Server Persistence
+        var sqlConnectionString = Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING");
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(sqlConnectionString);
+
+        var persistence = endpointConfiguration.UsePersistence<SqlPersistence>();
+        persistence.SqlDialect<SqlDialect.MsSqlServer>();
+        persistence.ConnectionBuilder(() => new Microsoft.Data.SqlClient.SqlConnection(sqlConnectionString));
 
         SetCommonEndpointSettings(endpointConfiguration);
+
+        var isUsingEmulator = serviceBusConnectionString.Contains("UseDevelopmentEmulator=true");
+
+        if (!isUsingEmulator) // The emulator only supports up to 10 connections, so skip connecting to Service Platform when using the emulator
+        {
+            ConnectToServicePlatform(endpointConfiguration);
+        }
 
         // Endpoint-specific customization
         customize?.Invoke(new Customizations(endpointConfiguration, routing));
 
         builder.UseNServiceBus(endpointConfiguration);
+
         return builder;
     }
-
 
     static void SetCommonEndpointSettings(EndpointConfiguration endpointConfiguration)
     {
@@ -44,18 +68,21 @@ public static class SharedConventions
         endpointConfiguration.EnableInstallers();
         endpointConfiguration.EnableOpenTelemetryMetrics();
         endpointConfiguration.EnableOpenTelemetryTracing();
+    }
 
+    static void ConnectToServicePlatform(EndpointConfiguration endpointConfiguration)
+    {
         endpointConfiguration.ConnectToServicePlatform(new ServicePlatformConnectionConfiguration
         {
             Heartbeats = new()
             {
                 Enabled = true,
-                HeartbeatsQueue = "Particular-ServiceControl",
+                HeartbeatsQueue = "Particular.ServiceControl",
             },
             CustomChecks = new()
             {
                 Enabled = true,
-                CustomChecksQueue = "Particular-ServiceControl"
+                CustomChecksQueue = "Particular.ServiceControl"
             },
             ErrorQueue = "error",
             SagaAudit = new()
@@ -71,7 +98,7 @@ public static class SharedConventions
             Metrics = new()
             {
                 Enabled = true,
-                MetricsQueue = "Particular-Monitoring",
+                MetricsQueue = "Particular.Monitoring",
                 Interval = TimeSpan.FromSeconds(1)
             }
         });

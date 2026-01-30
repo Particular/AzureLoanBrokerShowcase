@@ -1,0 +1,47 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/Solution Items/">
+    <File Path="../README.md" />
+  </Folder>
+  <Folder Name="/Solution Items/docker/">
+    <File Path="../docker-compose-ASB-emulator.yml" />
+    <File Path="../docker-compose.yml" />
+    <File Path="../env/azure-local.env" />
+    <File Path="../env/azure.env" />
+    <File Path="../env/service-platform.env" />
+  </Folder>
+  <Folder Name="/Solution Items/grafana/">
+    <File Path="grafana/dashboards/loan_broker_dashboard.json" />
+    <File Path="grafana/dashboards/loan_broker_demo_dashboard.json" />
+    <File Path="grafana/dashboards/nservicebus_dashboard.json" />
+    <File Path="grafana/provisioning/dashboards/dashboard_provider.yml" />
+    <File Path="grafana/provisioning/datasources/prometheus_ds.yml" />
+  </Folder>
+  <Folder Name="/Solution Items/img/">
+    <File Path="../img/architecture-view.png" />
+  </Folder>
+  <Folder Name="/Solution Items/otel/">
+    <File Path="otel/otel-collector-config.yaml" />
+  </Folder>
+  <Folder Name="/Solution Items/prometheus/">
+    <File Path="prometheus/prometheus.yml" />
+  </Folder>
+  <Folder Name="/Solution Items/sql/">
+    <File Path="sqlserver/init-db.sh" />
+  </Folder>
+  <Project Path="Bank1Adapter/Bank1Adapter.csproj" />
+  <Project Path="Bank2Adapter/Bank2Adapter.csproj" />
+  <Project Path="Bank3Adapter/Bank3Adapter.csproj" />
+  <Project Path="BankMessages/BankMessages.csproj" />
+  <Project Path="Client/Client.csproj" />
+  <Project Path="ClientMessages/ClientMessages.csproj" />
+  <Project Path="CommonConfigurations/CommonConfigurations.csproj" />
+  <Project Path="CreditBureau/CreditBureau.csproj" />
+  <Project Path="EmailSender/EmailSender.csproj" />
+  <Project Path="LoanBroker/LoanBroker.csproj" />
+  <Project Path="Tests/Tests.csproj" />
+</Solution>

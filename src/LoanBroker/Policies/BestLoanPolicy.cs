@@ -52,7 +52,7 @@ class BestLoanPolicy(
 
     public Task Handle(QuoteRequestRefusedByBank message, IMessageHandlerContext context)
     {
-        logger.LogWarning($"Quote, for request ID {message.RequestId}, refused by bank {message.BankId}. Request: {message.RequestId}");
+        logger.LogWarning($"Quote, for request ID {message.RequestId}, refused by bank {message.BankId}.");
         Data.RejectedBy.Add(message.BankId);
 
         var tags = new TagList(
