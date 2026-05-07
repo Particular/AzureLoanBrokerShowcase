@@ -1,2 +1,10 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Shell scripts and Dockerfiles must always use LF, otherwise Linux containers
+# fail to execute them (e.g. "cannot execute: required file not found" from
+# CRLF on the shebang line)
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf

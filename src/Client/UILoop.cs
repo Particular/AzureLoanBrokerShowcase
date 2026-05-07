@@ -64,6 +64,11 @@ static class UILoop
                 await Task.Delay(1000);
                 await SendMessage(messageSession);
             }
+            else
+            {
+                // Yield to avoid pegging a CPU core polling Console.KeyAvailable
+                await Task.Delay(50);
+            }
         }
     }
 
