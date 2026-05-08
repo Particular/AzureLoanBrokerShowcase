@@ -12,6 +12,7 @@ This is the logical architecture:
 And this is how that is represented using Azure services running locally:
 
 ![Azure Architectural Diagram](img/architecture-view.png)
+
 ## What's in the box
 
 The example is composed by:
@@ -47,6 +48,8 @@ Before running the complete example in Docker, create a local `.env` file from `
 > The `.env` file is local only and should not be committed.
 
 To run the complete example in Docker, execute the following command from the root folder:
+
+The initial run will pull several containers required to run the demo. See [Ports](#ports) for the host ports these containers expose — make sure they are free before starting.
 
 ```shell
 docker compose up --build -d
@@ -84,7 +87,7 @@ docker compose -f docker-compose-ASB-emulator.yml down
 ```
 
 > [!NOTE]
-> The emulator-based setup is a cut down version of the showcase and excludes Bank2 due to the Azure Service Bus Emulator connection limits. Microsoft has confirmed there are currently no plans to increase these limits: https://github.com/Azure/azure-service-bus-emulator-installer/issues/58#issuecomment-2984760245
+> The emulator-based setup is a cut down version of the showcase and excludes Bank2 due to the Azure Service Bus Emulator connection limits. Microsoft has confirmed there are currently no plans to increase these limits: <https://github.com/Azure/azure-service-bus-emulator-installer/issues/58#issuecomment-2984760245>
 
 ### Running endpoints from the IDE
 
@@ -94,22 +97,61 @@ If you prefer to start the endpoints from your IDE to debug the code, execute th
 docker compose --profile infrastructure up -d
 ```
 
+### Ports
+
+The endpoint containers (Client, LoanBroker, Bank1/2/3, EmailSender) do not expose host ports — they communicate over Azure Service Bus. The infrastructure containers expose the following ports on the host. Make sure these are free before starting the demo.
+
+#### Default setup (`docker-compose.yml`)
+
+| Port  | Service                                       |
+|-------|-----------------------------------------------|
+| 1433  | SQL Server (NServiceBus persistence)          |
+| 3000  | Grafana                                       |
+| 4317  | OpenTelemetry Collector — OTLP gRPC           |
+| 5318  | OpenTelemetry Collector — OTLP HTTP           |
+| 1234  | OpenTelemetry Collector — Prometheus endpoint |
+| 7071  | Credit Bureau (Azure Functions worker)        |
+| 8080  | ServiceControl RavenDB Studio                 |
+| 9090  | Prometheus                                    |
+| 9999  | ServicePulse UI                               |
+| 16686 | Jaeger UI                                     |
+| 33333 | ServiceControl API                            |
+| 33633 | ServiceControl Monitoring API                 |
+| 44444 | ServiceControl Audit API                      |
+
+#### Azure Service Bus Emulator setup (`docker-compose-ASB-emulator.yml`)
+
+The emulator-based setup omits the Particular platform containers (ServiceControl, ServiceControl Audit, ServiceControl Monitoring, ServicePulse) and adds the emulator itself.
+
+| Port  | Service                                       |
+|-------|-----------------------------------------------|
+| 1433  | SQL Server                                    |
+| 3000  | Grafana                                       |
+| 4317  | OpenTelemetry Collector — OTLP gRPC           |
+| 5318  | OpenTelemetry Collector — OTLP HTTP           |
+| 1234  | OpenTelemetry Collector — Prometheus endpoint |
+| 5300  | Azure Service Bus Emulator (management)       |
+| 5672  | Azure Service Bus Emulator (AMQP)             |
+| 7071  | Credit Bureau                                 |
+| 9090  | Prometheus                                    |
+| 16686 | Jaeger UI                                     |
+
 ## Things to try
 
 Once the project is running, here are some things to try. (Links are to `localhost` and will only work when the project is running.)
 
 1. Explore some [traces in the Jaeger UI](http://localhost:16686/search?service=LoanBroker).
-    * The green circles are traces where the entire flow completed successfully.
-    * The red circles are traces that contain an exception at some point. (Bank3 fails 1/3 of the time.) Click into the failed steps and find the exception message and stack trace in the logs.
+    - The green circles are traces where the entire flow completed successfully.
+    - The red circles are traces that contain an exception at some point. (Bank3 fails 1/3 of the time.) Click into the failed steps and find the exception message and stack trace in the logs.
 2. Check out a selection of [business metrics in Grafana](http://localhost:3000/d/edmhjobnxatc0c/loan-broker-demo?orgId=1&refresh=5s&from=now-15m&to=now&timezone=browser). (User `admin` and password `admin`.)
-    * Some metrics are available for individual message types, even though the messages are processed from the same message queue.
-    * Many more metrics are available by navigating to [Dashboards](http://localhost:3000/dashboards) and selecting a different dashboard.
+    - Some metrics are available for individual message types, even though the messages are processed from the same message queue.
+    - Many more metrics are available by navigating to [Dashboards](http://localhost:3000/dashboards) and selecting a different dashboard.
 3. Explore the [ServicePulse endpoint monitoring dashboard](http://localhost:9999/#/monitoring?historyPeriod=1), then navigate to [LoanBroker](http://localhost:9999/#/monitoring/endpoint/LoanBroker?historyPeriod=1) to see how these metrics are available for individual message types as well.
 4. Investigate the EmailSender failures (the code is rigged to fail 5% of the time) in the [ServicePulse Failed Messages view](http://localhost:9999/#/failed-messages/failed-message-groups).
-    * Navigate into the failed message group, then to an individual message.
-    * Click on the tabs to see how the stack trace, message headers, and message body help a developer to troubleshoot and fix [systemic errors](https://particular.net/blog/but-all-my-errors-are-severe).
-    * Return to the [failed message groups view](http://localhost:9999/#/failed-messages/failed-message-groups) and request a retry for the entire batch of failed messages.
-    * The message handler will still fail 5% of the time. Click into the message group and see if there are any messages showing Retry Failures.
+    - Navigate into the failed message group, then to an individual message.
+    - Click on the tabs to see how the stack trace, message headers, and message body help a developer to troubleshoot and fix [systemic errors](https://particular.net/blog/but-all-my-errors-are-severe).
+    - Return to the [failed message groups view](http://localhost:9999/#/failed-messages/failed-message-groups) and request a retry for the entire batch of failed messages.
+    - The message handler will still fail 5% of the time. Click into the message group and see if there are any messages showing Retry Failures.
 
 ## Monitoring
 
@@ -143,9 +185,10 @@ Similarly, endpoints send metrics to Prometheus. To visualize metrics, open the 
 > [!NOTE]
 > Setting a new password can be skipped. When containers are redeployed, the credentials are reset to their default values.
 
-The example deploys two pre-configured Grafana dashboards:
+The example deploys three pre-configured Grafana dashboards:
 
 - The [LoanBroker](http://localhost:3000/d/edmhjobnxatc0b/loanbroker?orgId=1&refresh=5s) dashboard shows various metrics about the business endpoints behavior, such as the differences between the services critical, processing, and handling time.
+- The [Loan Broker Demo](http://localhost:3000/d/edmhjobnxatc0c/loan-broker-demo?orgId=1&refresh=5s) dashboard highlights a curated set of business metrics broken down by individual message type, useful for walking through the showcase.
 - The [NServiceBus](http://localhost:3000/d/MHqYOIqnz/nservicebus?orgId=1&refresh=5s) dashboard shows the metrics related to message fetches, processing, and failures, grouped by endpoints or message type.
 
 > [!NOTE]
