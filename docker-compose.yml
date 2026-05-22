@@ -33,9 +33,7 @@ services:
       - ls
   loan-broker:
     profiles: ['']
-    build:
-      context: ./
-      dockerfile: ./src/LoanBroker/Dockerfile
+    image: loanbroker-azure/loan-broker:latest
     env_file:
       - env/metrics.env
       - env/azure.env
@@ -50,9 +48,7 @@ services:
       - ls
   bank1:
     profiles: ['']
-    build:
-      context: ./
-      dockerfile: ./src/Bank1Adapter/Dockerfile
+    image: loanbroker-azure/bank1:latest
     env_file:
       - env/metrics.env
       - env/azure.env
@@ -65,9 +61,7 @@ services:
       - ls
   bank2:
     profiles: ['']
-    build:
-      context: ./
-      dockerfile: ./src/Bank2Adapter/Dockerfile
+    image: loanbroker-azure/bank2:latest
     env_file:
       - env/metrics.env
       - env/azure.env
@@ -80,9 +74,7 @@ services:
       - ls
   bank3:
     profiles: ['']
-    build:
-      context: ./
-      dockerfile: ./src/Bank3Adapter/Dockerfile
+    image: loanbroker-azure/bank3:latest
     env_file:
       - env/metrics.env
       - env/azure.env
@@ -95,9 +87,7 @@ services:
       - ls
   email-sender:
     profiles: ['']
-    build:
-      context: ./
-      dockerfile: ./src/EmailSender/Dockerfile
+    image: loanbroker-azure/email-sender:latest
     env_file:
       - env/metrics.env
       - env/azure.env
@@ -110,9 +100,7 @@ services:
       - ls
   client:
     profiles: ['']
-    build:
-      context: ./
-      dockerfile: ./src/Client/Dockerfile
+    image: loanbroker-azure/client:latest
     env_file:
       - env/metrics.env
       - env/azure.env
