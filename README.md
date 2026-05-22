@@ -33,7 +33,7 @@ The example also ships the following monitoring services:
 
 ## Requirements
 
-- .NET 10 or greater
+- .NET 10 SDK
 - Docker
 - Docker Compose
 
@@ -47,18 +47,19 @@ Before running the complete example in Docker, create a local `.env` file from `
 > [!NOTE]
 > The `.env` file is local only and should not be committed.
 
-To run the complete example in Docker, execute the following command from the root folder:
+To run the complete example in Docker, publish the endpoint container images and start the Compose environment from the root folder:
 
 The initial run will pull several containers required to run the demo. See [Ports](#ports) for the host ports these containers expose — make sure they are free before starting.
 
 ```shell
-docker compose up --build -d
+dotnet publish src/AzureLoanBrokerShowcase.slnx -c Release --os linux /t:PublishContainer
+docker compose up -d
 ```
 
 > [!TIP]
 > Once the project is running, check out the [Things to try](#things-to-try) section.
 
-The above command will build all projects, build container images locally, and start them. The Docker Compose command will also run and configure all the additional infrastructural containers.
+The `dotnet publish` command builds projects and publishes Linux container images to the local Docker registry using the .NET SDK built-in container support. The Docker Compose command starts those endpoint images and configures all the additional infrastructural containers.
 
 To stop the running solution and remove all deployed containers. Using a command prompt, execute the following command:
 
@@ -77,7 +78,8 @@ docker compose up -d
 To run the cut down version of the showcase with the Azure Service Bus Emulator, execute the following command from the root folder:
 
 ```shell
-docker compose -f docker-compose-ASB-emulator.yml up --build -d
+dotnet publish src/AzureLoanBrokerShowcase.slnx -c Release --os linux /t:PublishContainer
+docker compose -f docker-compose-ASB-emulator.yml up -d
 ```
 
 To stop the emulator-based solution and remove all deployed containers, execute the following command:
