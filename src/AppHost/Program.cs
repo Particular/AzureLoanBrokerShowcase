@@ -8,24 +8,13 @@ builder.AddDockerComposeEnvironment("compose")
 var serviceBusConnectionString = builder.AddParameter("azureServiceBusConnectionString", secret: true);
 var transport = builder.AddConnectionString("transport", ReferenceExpression.Create($"{serviceBusConnectionString}"));
 
-const string sqlConnectionString =
-    "Server=sqlserver;Database=NServiceBus;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;";
-const string creditBureauUrl = "http://creditbureau:80/api/score";
-const string otlpMetricsUrl = "http://otel-collector:5318/v1/metrics";
-const string otlpTracingUrl = "http://otel-collector:5318/v1/traces";
-
-var sqlServer = builder.AddSqlServer("sqlserver")
-    .WithEnvironment("ACCEPT_EULA", "Y")
-    .WithEnvironment("MSSQL_SA_PASSWORD", "YourStrong@Passw0rd")
+var sqlPassword = builder.AddParameter("sql-password", "YourStrong@Passw0rd");
+var sqlServer = builder.AddSqlServer("sqlserver", password: sqlPassword)
     .WithEnvironment("MSSQL_PID", "Developer")
     .WithEnvironment("MSSQL_COLLATION", "SQL_Latin1_General_CP1_CI_AS")
-    .WithContainerRuntimeArgs("--platform", "linux/amd64")
-    .WithContainerRuntimeArgs("--ulimit", "stack=8192:8192")
-    .WithVolume("sqlserver-data", "/var/opt/mssql")
-    .WithBindMount("../src/sqlserver/", "/tmp/scripts/")
-    .AddDatabase("sqlserver-db","NServiceBus")
-//    .WithArgs("bash", "-c", "/tmp/scripts/init-db.sh")
-    ;
+    .WithVolume("sqlserver-data", "/var/opt/mssql");
+
+var nsbDatabase = sqlServer.AddDatabase("nsb-database", "NServiceBus");
 
 var creditBureau = builder.AddDockerfile(
         "creditbureau",
@@ -66,59 +55,33 @@ var platform = builder
     .WithTransportAzureServiceBus(transport)
     .AddDefaultComponents();
 
-var sharedServiceEnvironment = new (string Name, string Value)[]
-{
-    ("SQL_CONNECTION_STRING", sqlConnectionString),
-    ("CREDIT_BUREAU_URL", creditBureauUrl),
-    ("OTLP_METRICS_URL", otlpMetricsUrl),
-    ("OTLP_TRACING_URL", otlpTracingUrl)
-};
+var otelHttp = otelCollector.GetEndpoint("http");
+var creditBureauHttp = creditBureau.GetEndpoint("http");
 
-var loanBroker = builder.AddProject<Projects.LoanBroker>("loan-broker")
-    .WithParticularPlatform(platform)
-    .WithEnvironment("AZURE_SERVICE_BUS_CONNECTION_STRING", serviceBusConnectionString)
-    .WaitFor(platform);
+IResourceBuilder<ProjectResource> ConfigureEndpoint(IResourceBuilder<ProjectResource> endpoint) =>
+    endpoint
+        .WithParticularPlatform(platform)
+        .WithEnvironment(context =>
+        {
+            context.EnvironmentVariables["SQL_CONNECTION_STRING"] = nsbDatabase.Resource.ConnectionStringExpression;
+            context.EnvironmentVariables["CREDIT_BUREAU_URL"] = ReferenceExpression.Create($"{creditBureauHttp}/api/score");
+            context.EnvironmentVariables["OTLP_METRICS_URL"] = ReferenceExpression.Create($"{otelHttp}/v1/metrics");
+            context.EnvironmentVariables["OTLP_TRACING_URL"] = ReferenceExpression.Create($"{otelHttp}/v1/traces");
+        })
+        .WaitFor(sqlServer)
+        .WaitFor(otelCollector)
+        .WaitFor(platform);
 
-foreach (var (name, value) in sharedServiceEnvironment)
-{
-    loanBroker.WithEnvironment(name, value);
-}
+var loanBroker = ConfigureEndpoint(builder.AddProject<Projects.LoanBroker>("loan-broker"))
+    .WaitFor(creditBureau);
 
-loanBroker.WaitFor(creditBureau);
+ConfigureEndpoint(builder.AddProject<Projects.Bank1Adapter>("bank1"));
+ConfigureEndpoint(builder.AddProject<Projects.Bank2Adapter>("bank2"));
+ConfigureEndpoint(builder.AddProject<Projects.Bank3Adapter>("bank3"));
+ConfigureEndpoint(builder.AddProject<Projects.EmailSender>("email-sender"));
 
-var bank1 = builder.AddProject<Projects.Bank1Adapter>("bank1")
-    .WithParticularPlatform(platform)
-    .WithEnvironment("AZURE_SERVICE_BUS_CONNECTION_STRING", serviceBusConnectionString)
-    .WaitFor(platform);
-
-var bank2 = builder.AddProject<Projects.Bank2Adapter>("bank2")
-    .WithParticularPlatform(platform)
-    .WithEnvironment("AZURE_SERVICE_BUS_CONNECTION_STRING", serviceBusConnectionString)
-    .WaitFor(platform);
-
-var bank3 = builder.AddProject<Projects.Bank3Adapter>("bank3")
-    .WithParticularPlatform(platform)
-    .WithEnvironment("AZURE_SERVICE_BUS_CONNECTION_STRING", serviceBusConnectionString)
-    .WaitFor(platform);
-
-var emailSender = builder.AddProject<Projects.EmailSender>("email-sender")
-    .WithParticularPlatform(platform)
-    .WithEnvironment("AZURE_SERVICE_BUS_CONNECTION_STRING", serviceBusConnectionString)
-    .WaitFor(platform);
-
-var client = builder.AddProject<Projects.Client>("client")
-    .WithParticularPlatform(platform)
-    .WithEnvironment("AZURE_SERVICE_BUS_CONNECTION_STRING", serviceBusConnectionString)
+ConfigureEndpoint(builder.AddProject<Projects.Client>("client"))
     .WithArgs("--demo")
-    .WaitFor(platform)
     .WaitFor(loanBroker);
-
-foreach (var endpoint in new[] { bank1, bank2, bank3, emailSender, client })
-{
-    foreach (var (name, value) in sharedServiceEnvironment)
-    {
-        endpoint.WithEnvironment(name, value);
-    }
-}
 
 builder.Build().Run();
