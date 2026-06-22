@@ -69,16 +69,16 @@ An Aspire AppHost is available at `src/AppHost/AppHost.csproj` and models the de
 To run the default setup through AppHost orchestration:
 
 ```shell
+env 'Parameters__particular-license=<your Particular license>' \
 Parameters__azureServiceBusConnectionString="<your Azure Service Bus connection string>" \
-Parameters__particularSoftwareLicense="<your Particular license>" \
 dotnet run --project src/AppHost/AppHost.csproj
 ```
 
 To generate Docker Compose deployment artifacts from the AppHost:
 
 ```shell
+env 'Parameters__particular-license=<your Particular license>' \
 Parameters__azureServiceBusConnectionString="<your Azure Service Bus connection string>" \
-Parameters__particularSoftwareLicense="<your Particular license>" \
 aspire publish --apphost src/AppHost/AppHost.csproj --output-path ./aspire-output
 ```
 
