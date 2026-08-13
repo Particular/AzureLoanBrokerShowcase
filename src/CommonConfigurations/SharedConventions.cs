@@ -20,8 +20,12 @@ public static class SharedConventions
 
         var endpointConfiguration = new EndpointConfiguration(endpointName);
 
-        // Configure Azure Transport
-        var serviceBusConnectionString = Environment.GetEnvironmentVariable("AZURE_SERVICE_BUS_CONNECTION_STRING");
+        // Configure Azure Transport. Prefer the transport connection string provided by the
+        // Particular Service Platform (when orchestrated by Aspire it is injected as
+        // ConnectionStrings__transport). Fall back to the legacy env var for the standalone
+        // docker-compose flow.
+        var serviceBusConnectionString = builder.Configuration.GetConnectionString("transport")
+            ?? Environment.GetEnvironmentVariable("AZURE_SERVICE_BUS_CONNECTION_STRING");
 
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceBusConnectionString);
 
