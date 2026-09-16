@@ -36,6 +36,7 @@ The example also ships the following monitoring services:
 - .NET 10 SDK
 - Docker
 - Docker Compose
+- Aspire CLI (for AppHost publish/deploy workflow)
 
 ## How to run the example
 
@@ -60,6 +61,34 @@ docker compose up -d
 > Once the project is running, check out the [Things to try](#things-to-try) section.
 
 The `dotnet publish` command builds projects and publishes Linux container images to the local Docker registry using the .NET SDK built-in container support. The Docker Compose command starts those endpoint images and configures all the additional infrastructural containers.
+
+### Running with .NET Aspire AppHost (default setup)
+
+An Aspire AppHost is available at `src/AppHost/AppHost.csproj` and models the default setup from `docker-compose.yml` (no Azure Service Bus emulator path).
+
+To run the default setup through AppHost orchestration:
+
+```shell
+env 'Parameters__particular-license=<your Particular license>' \
+Parameters__azureServiceBusConnectionString="<your Azure Service Bus connection string>" \
+dotnet run --project src/AppHost/AppHost.csproj
+```
+
+To generate Docker Compose deployment artifacts from the AppHost:
+
+```shell
+env 'Parameters__particular-license=<your Particular license>' \
+Parameters__azureServiceBusConnectionString="<your Azure Service Bus connection string>" \
+aspire publish --apphost src/AppHost/AppHost.csproj --output-path ./aspire-output
+```
+
+Then run the generated artifacts:
+
+```shell
+docker compose --env-file ./aspire-output/.env -f ./aspire-output/docker-compose.yaml up -d
+```
+
+The generated AppHost Compose output keeps the existing OTEL collector/Prometheus/Grafana/Jaeger path and also adds the Aspire dashboard container.
 
 To stop the running solution and remove all deployed containers. Using a command prompt, execute the following command:
 
@@ -108,6 +137,7 @@ The endpoint containers (Client, LoanBroker, Bank1/2/3, EmailSender) do not expo
 | Port  | Service                                       |
 |-------|-----------------------------------------------|
 | 1433  | SQL Server (NServiceBus persistence)          |
+| 18888 | Aspire dashboard UI (AppHost-generated Compose) |
 | 3000  | Grafana                                       |
 | 4317  | OpenTelemetry Collector — OTLP gRPC           |
 | 5318  | OpenTelemetry Collector — OTLP HTTP           |
