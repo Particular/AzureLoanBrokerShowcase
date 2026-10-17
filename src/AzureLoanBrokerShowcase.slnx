@@ -34,6 +34,7 @@
     <File Path="sqlserver/init-db.sh" />
   </Folder>
   <Project Path="Bank1Adapter/Bank1Adapter.csproj" />
+  <Project Path="AppHost/AppHost.csproj" />
   <Project Path="Bank2Adapter/Bank2Adapter.csproj" />
   <Project Path="Bank3Adapter/Bank3Adapter.csproj" />
   <Project Path="BankMessages/BankMessages.csproj" />
