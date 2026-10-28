@@ -106,3 +106,4 @@ src/scaffolding.config
 src/volumes
 
 .env
+src/AppHost/appsettings.Development.json
