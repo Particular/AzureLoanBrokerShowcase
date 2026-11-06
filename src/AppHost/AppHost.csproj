@@ -1,0 +1,28 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.6.4">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>4e39df4e-d8de-43bc-84c0-0b596fb97262</UserSecretsId>
+    <!-- The AppHost runs with F5 / dotnet run without the Aspire CLI installed, so the CLI bundle is not used -->
+    <NoWarn>$(NoWarn);ASPIRE010</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.SqlServer" Version="13.6.4" />
+    <PackageReference Include="Particular.Aspire.Hosting.ServicePlatform" Version="1.1.1" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Bank1Adapter\Bank1Adapter.csproj" />
+    <ProjectReference Include="..\Bank2Adapter\Bank2Adapter.csproj" />
+    <ProjectReference Include="..\Bank3Adapter\Bank3Adapter.csproj" />
+    <ProjectReference Include="..\Client\Client.csproj" />
+    <ProjectReference Include="..\EmailSender\EmailSender.csproj" />
+    <ProjectReference Include="..\LoanBroker\LoanBroker.csproj" />
+  </ItemGroup>
+
+</Project>

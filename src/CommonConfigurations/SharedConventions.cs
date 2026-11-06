@@ -21,7 +21,9 @@ public static class SharedConventions
         var endpointConfiguration = new EndpointConfiguration(endpointName);
 
         // Configure Azure Transport
-        var serviceBusConnectionString = Environment.GetEnvironmentVariable("AZURE_SERVICE_BUS_CONNECTION_STRING");
+        // ConnectionStrings:transport is provided by the Aspire AppHost, AZURE_SERVICE_BUS_CONNECTION_STRING by Docker Compose
+        var serviceBusConnectionString = builder.Configuration.GetConnectionString("transport")
+            ?? Environment.GetEnvironmentVariable("AZURE_SERVICE_BUS_CONNECTION_STRING");
 
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceBusConnectionString);
 
@@ -33,7 +35,9 @@ public static class SharedConventions
         var routing = endpointConfiguration.UseTransport(transport);
 
         // Configure SQL Server Persistence
-        var sqlConnectionString = Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING");
+        // ConnectionStrings:nservicebus is provided by the Aspire AppHost, SQL_CONNECTION_STRING by Docker Compose
+        var sqlConnectionString = builder.Configuration.GetConnectionString("nservicebus")
+            ?? Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING");
 
         ArgumentException.ThrowIfNullOrWhiteSpace(sqlConnectionString);
 
