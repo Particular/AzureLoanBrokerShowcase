@@ -73,6 +73,33 @@ To run the solution without rebuilding container images, execute the following c
 docker compose up -d
 ```
 
+#### Troubleshooting on Windows
+
+- **`dotnet publish` fails with `MSB4018` and `System.UnauthorizedAccessException: Access to the path is denied`.** The projects are published in parallel and download the same base image layers at the same time. Publish one project at a time by adding `-m:1`:
+
+  ```shell
+  dotnet publish src/AzureLoanBrokerShowcase.slnx -c Release --os linux /t:PublishContainer -m:1
+  ```
+
+  If it still fails, delete the `%TEMP%\Containers\ContentStore` folder and run the command again.
+
+- **`docker compose up` fails with `ports are not available` and `An attempt was made to access a socket in a way forbidden by its access permissions`.** Windows has reserved the port, even though no application is using it. List the reserved ranges with:
+
+  ```shell
+  netsh interface ipv4 show excludedportrange protocol=tcp
+  ```
+
+  To use a different host port, create a `docker-compose.override.yml` file in the root folder. Docker Compose applies it automatically. For example, to expose Prometheus on port 19090 instead of 9090:
+
+  ```yaml
+  services:
+    prometheus:
+      ports: !override
+        - '19090:9090'
+  ```
+
+  Do not commit the override file.
+
 ### Running with Azure Service Bus Emulator
 
 To run the cut down version of the showcase with the Azure Service Bus Emulator, execute the following command from the root folder:
