@@ -20,6 +20,16 @@ static class UILoop
         var messageSession = app.Services.GetRequiredService<IMessageSession>();
         var running = true;
         var continuousSend = false;
+
+        // Console.KeyAvailable/ReadKey throw when stdin is redirected (e.g. running as an Aspire
+        // project resource or any other non-TTY host), so only poll the keyboard when we actually
+        // have an interactive console. In --demo mode the loop drives itself and needs no input.
+        var interactive = !Console.IsInputRedirected;
+        if (!interactive)
+        {
+            Console.WriteLine("No interactive console detected; keyboard controls are disabled.");
+        }
+
         Console.CancelKeyPress += (_, e) =>
         {
             e.Cancel = true;
@@ -37,7 +47,7 @@ static class UILoop
 
         while (running)
         {
-            if (Console.KeyAvailable)
+            if (interactive && Console.KeyAvailable)
             {
                 var k = Console.ReadKey(true);
                 switch (k.Key)

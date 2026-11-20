@@ -21,7 +21,7 @@ static class OpenTelemetryExtensions
 
         var resourceBuilder = ResourceBuilder.CreateDefault().AddAttributes(attributes);
 
-        Sdk.CreateMeterProviderBuilder()
+        var meterProviderBuilder = Sdk.CreateMeterProviderBuilder()
             .SetResourceBuilder(resourceBuilder)
             .AddMeter("NServiceBus.Core.Pipeline.Incoming")
             .AddMeter("LoanBroker")
@@ -30,8 +30,16 @@ static class OpenTelemetryExtensions
                 var url = Environment.GetEnvironmentVariable(OtlpMetricsUrlEnvVar) ?? OtlpMetricsDefaultUrl;
                 cfg.Endpoint = new Uri(url);
                 cfg.Protocol = OtlpExportProtocol.HttpProtobuf;
-            })
-            .Build();
+            });
+
+        // When orchestrated by Aspire, also export to the dashboard's OTLP endpoint so traces and
+        // metrics show up in the Aspire dashboard.
+        if (HasAspireOtlpEndpoint())
+        {
+            meterProviderBuilder.AddOtlpExporter();
+        }
+
+        meterProviderBuilder.Build();
     }
 
     public static void EnableOpenTelemetryTracing(this EndpointConfiguration endpointConfiguration)
@@ -46,7 +54,7 @@ static class OpenTelemetryExtensions
 
         var resourceBuilder = ResourceBuilder.CreateDefault().AddAttributes(attributes);
 
-        Sdk.CreateTracerProviderBuilder()
+        var tracerProviderBuilder = Sdk.CreateTracerProviderBuilder()
             .SetResourceBuilder(resourceBuilder)
             .AddSource("NServiceBus.Core")
             .AddOtlpExporter(cfg =>
@@ -54,9 +62,22 @@ static class OpenTelemetryExtensions
                 var url = Environment.GetEnvironmentVariable(OtlpTracesUrlEnvVar) ?? OtlpTracesDefaultUrl;
                 cfg.Endpoint = new Uri(url);
                 cfg.Protocol = OtlpExportProtocol.HttpProtobuf;
-            })
-            .Build();
+            });
+
+        // Also feed the Aspire dashboard when running under the AppHost (see metrics for details).
+        if (HasAspireOtlpEndpoint())
+        {
+            tracerProviderBuilder.AddOtlpExporter();
+        }
+
+        tracerProviderBuilder.Build();
     }
+
+    // Aspire injects OTEL_EXPORTER_OTLP_ENDPOINT (plus protocol/headers) into project resources it
+    // orchestrates. Its absence means we are not running under Aspire (e.g. plain Docker Compose),
+    // so the dashboard exporter is skipped and only the collector pipeline is used.
+    static bool HasAspireOtlpEndpoint() =>
+        !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT"));
 
     const string OtlpMetricsDefaultUrl = "http://localhost:5318/v1/metrics";
     const string OtlpTracesDefaultUrl = "http://localhost:5318/v1/traces";
