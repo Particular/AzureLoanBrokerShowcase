@@ -146,10 +146,44 @@ docker compose -f docker-compose-ASB-emulator.yml down
 
 ### Running endpoints from the IDE
 
-If you prefer to start the endpoints from your IDE to debug the code, execute the following command from a command prompt in the root directory to start the required infrastructure:
+> [!TIP]
+> The simplest way to debug the endpoints is [running with Aspire](#running-with-aspire), which starts the infrastructure and configures the endpoints automatically. The steps below are for running the endpoints from the IDE without Aspire.
+
+If you prefer to start the endpoints from your IDE to debug the code, make sure the `.env` file is set up as described in [How to run the example](#how-to-run-the-example), then execute the following command from a command prompt in the root directory to start the required infrastructure:
 
 ```shell
 docker compose --profile infrastructure up -d
+```
+
+This starts SQL Server, the Credit Bureau, the Particular Platform, and the observability containers, but not the endpoints.
+
+When the endpoints run outside Docker, they need the following environment variables. Inside Docker, Compose provides them from the `.env` file and the files in the `env` folder.
+
+| Variable | Needed by | Value |
+| -------- | --------- | ----- |
+| `AZURE_SERVICE_BUS_CONNECTION_STRING` | All endpoints | Your Azure Service Bus connection string (the same value as in `.env`) |
+| `SQL_CONNECTION_STRING` | All endpoints | `Server=localhost,1433;Database=NServiceBus;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;` |
+| `CREDIT_BUREAU_URL` | LoanBroker | `http://localhost:7071/api/score` |
+
+The SQL Server and Credit Bureau values point at `localhost`, because the container host names (`sqlserver`, `creditbureau`) only resolve inside the Docker network. The endpoints send telemetry to the OpenTelemetry Collector on `http://localhost:5318` by default, so no variable is needed for that.
+
+Set the variables in the environment the IDE starts the endpoints from, for example in the run configuration of each endpoint, or in the `environmentVariables` section of each endpoint's `Properties/launchSettings.json`:
+
+```json
+"environmentVariables": {
+  "DOTNET_ENVIRONMENT": "Development",
+  "AZURE_SERVICE_BUS_CONNECTION_STRING": "<your Azure Service Bus connection string>",
+  "SQL_CONNECTION_STRING": "Server=localhost,1433;Database=NServiceBus;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;",
+  "CREDIT_BUREAU_URL": "http://localhost:7071/api/score"
+}
+```
+
+Then start the endpoints from the IDE (for example, using a multiple startup projects configuration). The client is interactive when started from a console. Pass `--demo` to make it send loan requests automatically.
+
+To stop the infrastructure, execute:
+
+```shell
+docker compose --profile infrastructure down
 ```
 
 ### Ports
@@ -251,4 +285,7 @@ The example deploys three pre-configured Grafana dashboards:
 - The [NServiceBus](http://localhost:3000/d/MHqYOIqnz/nservicebus?orgId=1&refresh=5s) dashboard shows the metrics related to message fetches, processing, and failures, grouped by endpoints or message type.
 
 > [!NOTE]
-> After running the solution multiple times, it might happen that Grafana suddenly shows random data instead of the expected metrics. To reset dashboards, tear down all containers and delete the `data-grafana` and `data-prometheus` folders from the solution folder. Redeploy the containers.
+> After running the solution multiple times, it might happen that Grafana suddenly shows random data instead of the expected metrics. To reset the dashboards, stop the solution and delete the Grafana and Prometheus data volumes, then start the solution again:
+>
+> - Docker Compose: run `docker compose down`, then `docker volume rm <project>_grafana-data <project>_prometheus-data`. `<project>` is the Compose project name, which defaults to the name of the root folder in lowercase (for example `azureloanbrokershowcase`). Run `docker volume ls` to see the exact names.
+> - Aspire: stop the AppHost, then run `docker volume rm loanbroker-grafana-data loanbroker-prometheus-data`.
