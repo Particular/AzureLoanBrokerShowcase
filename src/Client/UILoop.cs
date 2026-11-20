@@ -20,6 +20,15 @@ static class UILoop
         var messageSession = app.Services.GetRequiredService<IMessageSession>();
         var running = true;
         var continuousSend = false;
+
+        // Console.KeyAvailable throws when stdin is redirected, e.g. when the client runs as an Aspire resource.
+        // In that case only --demo mode is available.
+        var interactive = !Console.IsInputRedirected;
+        if (!interactive)
+        {
+            Console.WriteLine("No interactive console detected, keyboard controls are disabled");
+        }
+
         Console.CancelKeyPress += (_, e) =>
         {
             e.Cancel = true;
@@ -37,7 +46,7 @@ static class UILoop
 
         while (running)
         {
-            if (Console.KeyAvailable)
+            if (interactive && Console.KeyAvailable)
             {
                 var k = Console.ReadKey(true);
                 switch (k.Key)

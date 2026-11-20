@@ -35,7 +35,7 @@ The example also ships the following monitoring services:
 
 - .NET 10 SDK
 - Docker
-- Docker Compose
+- Docker Compose (not needed when [running with Aspire](#running-with-aspire))
 
 ## How to run the example
 
@@ -73,6 +73,59 @@ To run the solution without rebuilding container images, execute the following c
 docker compose up -d
 ```
 
+### Running with Aspire
+
+The solution includes an [Aspire](https://aspire.dev/) AppHost (`src/AppHost`) that starts the whole showcase with a single command or F5 in the IDE. It uses the [Particular Service Platform Aspire integration](https://docs.particular.net/platform/aspire) for ServiceControl and ServicePulse, and runs the endpoints as local .NET processes, so breakpoints work without any extra setup.
+
+Before starting, make sure:
+
+- Docker is running.
+- You have an Azure Service Bus namespace on the Standard tier or higher (NServiceBus uses topics, which the Basic tier doesn't support).
+- The host ports listed in [Ports](#ports) are free. A locally installed ServicePulse, for example, uses port 9090 by default.
+
+To run the showcase:
+
+1. Provide the Azure Service Bus connection string to the AppHost.
+
+    The endpoints and the Particular Platform need a connection string with permission to manage queues and topics, because they create them on startup. The connection string of the namespace's `RootManageSharedAccessKey` policy works. To get it:
+
+    - In the [Azure portal](https://portal.azure.com), open the Service Bus namespace, select **Settings** > **Shared access policies** > **RootManageSharedAccessKey**, and copy the **Primary Connection String**.
+    - Or, using the Azure CLI:
+
+        ```shell
+        az servicebus namespace authorization-rule keys list --resource-group <resource group> --namespace-name <namespace> --name RootManageSharedAccessKey --query primaryConnectionString --output tsv
+        ```
+
+    The connection string looks like `Endpoint=sb://<namespace>.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=<key>`.
+
+    Store it as a [user secret](https://learn.microsoft.com/aspnet/core/security/app-secrets) for the AppHost by running the following command from the root folder:
+
+    ```shell
+    dotnet user-secrets set ConnectionStrings:transport "<your Azure Service Bus connection string>" --project src/AppHost
+    ```
+
+    User secrets are stored in your user profile, outside the repository, so the connection string can't be committed by accident. This only needs to be done once per machine. The AppHost passes the connection string to the endpoints and to ServiceControl.
+
+    To check the stored value, run `dotnet user-secrets list --project src/AppHost`. To change it, run the `set` command again. To remove it, run `dotnet user-secrets remove ConnectionStrings:transport --project src/AppHost`.
+
+    > [!TIP]
+    > Instead of a user secret, the connection string can be set in the `ConnectionStrings__transport` environment variable. If it is not set at all, the Aspire dashboard asks for it on startup and can save it to the user secrets for you.
+
+2. Start the AppHost, using one of these options:
+    - In Visual Studio or Rider, set `AppHost` as the startup project and press F5.
+    - From the root folder, run `dotnet run --project src/AppHost`.
+    - If the [Aspire CLI](https://aspire.dev/get-started/install-cli/) is installed, run `aspire run` from the root folder.
+
+3. Open the Aspire dashboard. It opens in the browser automatically, and its login link is also printed in the console. The dashboard shows every resource, its state, its logs, and links to its UI.
+
+    The first run takes a few minutes, because the container images are downloaded and the Credit Bureau image is built. The endpoints start once SQL Server, the Credit Bureau, and the Particular Platform are ready. The client then starts sending loan requests automatically.
+
+4. Explore the running system. Grafana, Prometheus, Jaeger, and ServicePulse use the same host ports as the Docker Compose setup, so the [Things to try](#things-to-try) links work unchanged. The endpoints also send traces and metrics to the Aspire dashboard.
+
+To stop the showcase, stop debugging in the IDE or press `Ctrl+C` in the console. Aspire removes the containers it started. The SQL Server, Prometheus, and Grafana data is kept in Docker volumes for the next run.
+
+The Particular Platform license is read from `license.xml` in the usual [license locations](https://docs.particular.net/nservicebus/licensing/#license-management) or from the `PARTICULARSOFTWARE_LICENSE` environment variable. Without a license, the platform runs in trial mode.
+
 ### Running with Azure Service Bus Emulator
 
 To run the cut down version of the showcase with the Azure Service Bus Emulator, execute the following command from the root folder:
@@ -93,10 +146,44 @@ docker compose -f docker-compose-ASB-emulator.yml down
 
 ### Running endpoints from the IDE
 
-If you prefer to start the endpoints from your IDE to debug the code, execute the following command from a command prompt in the root directory to start the required infrastructure:
+> [!TIP]
+> The simplest way to debug the endpoints is [running with Aspire](#running-with-aspire), which starts the infrastructure and configures the endpoints automatically. The steps below are for running the endpoints from the IDE without Aspire.
+
+If you prefer to start the endpoints from your IDE to debug the code, make sure the `.env` file is set up as described in [How to run the example](#how-to-run-the-example), then execute the following command from a command prompt in the root directory to start the required infrastructure:
 
 ```shell
 docker compose --profile infrastructure up -d
+```
+
+This starts SQL Server, the Credit Bureau, the Particular Platform, and the observability containers, but not the endpoints.
+
+When the endpoints run outside Docker, they need the following environment variables. Inside Docker, Compose provides them from the `.env` file and the files in the `env` folder.
+
+| Variable | Needed by | Value |
+| -------- | --------- | ----- |
+| `AZURE_SERVICE_BUS_CONNECTION_STRING` | All endpoints | Your Azure Service Bus connection string (the same value as in `.env`) |
+| `SQL_CONNECTION_STRING` | All endpoints | `Server=localhost,1433;Database=NServiceBus;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;` |
+| `CREDIT_BUREAU_URL` | LoanBroker | `http://localhost:7071/api/score` |
+
+The SQL Server and Credit Bureau values point at `localhost`, because the container host names (`sqlserver`, `creditbureau`) only resolve inside the Docker network. The endpoints send telemetry to the OpenTelemetry Collector on `http://localhost:5318` by default, so no variable is needed for that.
+
+Set the variables in the environment the IDE starts the endpoints from, for example in the run configuration of each endpoint, or in the `environmentVariables` section of each endpoint's `Properties/launchSettings.json`:
+
+```json
+"environmentVariables": {
+  "DOTNET_ENVIRONMENT": "Development",
+  "AZURE_SERVICE_BUS_CONNECTION_STRING": "<your Azure Service Bus connection string>",
+  "SQL_CONNECTION_STRING": "Server=localhost,1433;Database=NServiceBus;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;",
+  "CREDIT_BUREAU_URL": "http://localhost:7071/api/score"
+}
+```
+
+Then start the endpoints from the IDE (for example, using a multiple startup projects configuration). The client is interactive when started from a console. Pass `--demo` to make it send loan requests automatically.
+
+To stop the infrastructure, execute:
+
+```shell
+docker compose --profile infrastructure down
 ```
 
 ### Ports
@@ -120,6 +207,10 @@ The endpoint containers (Client, LoanBroker, Bank1/2/3, EmailSender) do not expo
 | 33333 | ServiceControl API                            |
 | 33633 | ServiceControl Monitoring API                 |
 | 44444 | ServiceControl Audit API                      |
+
+#### Aspire setup (`src/AppHost`)
+
+The Aspire AppHost uses the same host ports for Grafana (3000), Prometheus (9090), ServicePulse (9999), Jaeger (16686), the Credit Bureau (7071), and the OpenTelemetry Collector (5318, 1234). SQL Server, RavenDB, and the ServiceControl instances get random ports, which are listed in the Aspire dashboard.
 
 #### Azure Service Bus Emulator setup (`docker-compose-ASB-emulator.yml`)
 
@@ -194,4 +285,7 @@ The example deploys three pre-configured Grafana dashboards:
 - The [NServiceBus](http://localhost:3000/d/MHqYOIqnz/nservicebus?orgId=1&refresh=5s) dashboard shows the metrics related to message fetches, processing, and failures, grouped by endpoints or message type.
 
 > [!NOTE]
-> After running the solution multiple times, it might happen that Grafana suddenly shows random data instead of the expected metrics. To reset dashboards, tear down all containers and delete the `data-grafana` and `data-prometheus` folders from the solution folder. Redeploy the containers.
+> After running the solution multiple times, it might happen that Grafana suddenly shows random data instead of the expected metrics. To reset the dashboards, stop the solution and delete the Grafana and Prometheus data volumes, then start the solution again:
+>
+> - Docker Compose: run `docker compose down`, then `docker volume rm <project>_grafana-data <project>_prometheus-data`. `<project>` is the Compose project name, which defaults to the name of the root folder in lowercase (for example `azureloanbrokershowcase`). Run `docker volume ls` to see the exact names.
+> - Aspire: stop the AppHost, then run `docker volume rm loanbroker-grafana-data loanbroker-prometheus-data`.

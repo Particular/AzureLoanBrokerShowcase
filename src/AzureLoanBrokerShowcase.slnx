@@ -5,6 +5,7 @@
     <Platform Name="x86" />
   </Configurations>
   <Folder Name="/Solution Items/">
+    <File Path="../aspire.config.json" />
     <File Path="../README.md" />
   </Folder>
   <Folder Name="/Solution Items/docker/">
@@ -33,6 +34,7 @@
   <Folder Name="/Solution Items/sql/">
     <File Path="sqlserver/init-db.sh" />
   </Folder>
+  <Project Path="AppHost/AppHost.csproj" />
   <Project Path="Bank1Adapter/Bank1Adapter.csproj" />
   <Project Path="Bank2Adapter/Bank2Adapter.csproj" />
   <Project Path="Bank3Adapter/Bank3Adapter.csproj" />
