@@ -3,23 +3,23 @@
 The Azure LoanBroker showcase is a comprehensive loan broker implementation following the [structure presented](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ComposedMessagingExample.html) by [Gregor Hohpe](https://www.enterpriseintegrationpatterns.com/gregor.html) in his [Enterprise Integration Pattern](https://www.enterpriseintegrationpatterns.com/) book.
 
 > [!Note]
-> The showcase runs locally using Docker, however, due to connection limitations with the Azure Service Bus Emulator, an Azure account is needed for the default setup. The [how to run the example](#how-to-run-the-example) section details how to configure the solution to connect to Azure services. A separate Docker Compose file is available for running the solution using the Azure Service Bus Emulator, but this is a cut down version of the showcase that does not demonstrate the full functionality of NServiceBus.
+> The showcase runs locally using Docker; however, due to connection limitations with the Azure Service Bus Emulator, an Azure account is needed for the default setup. The [how to run the example](#how-to-run-the-example) section details how to configure the solution to connect to Azure services. A separate Docker Compose file is available for running the solution using the Azure Service Bus Emulator, but this is a cut down version of the showcase that does not demonstrate the full functionality of NServiceBus.
 
 This is the logical architecture:
 
 ![Logical architecture](https://github.com/user-attachments/assets/5f2ef8b0-c7d4-4cef-ab7b-a8561cbd3282)
 
-And this is how that is represented using Azure services running locally:
+And this is how that is represented using Azure services:
 
 ![Azure Architectural Diagram](img/architecture-view.png)
 
 ## What's in the box
 
-The example is composed by:
+The example is composed of:
 
 - A client application, sending loan requests.
 - A credit bureau providing the customers' credit score.
-- A loan broker service that receives loan requests enriches them with credit scores and orchestrates communication with downstream banks.
+- A loan broker service that receives loan requests, enriches them with credit scores and orchestrates communication with downstream banks.
 - Three bank adapters, acting like Anti-Corruption layers (ACL), simulate communication with downstream banks offering loans.
 - An email sender simulating email communication with customers.
 
@@ -47,9 +47,9 @@ Before running the complete example in Docker, create a local `.env` file from `
 > [!NOTE]
 > The `.env` file is local only and should not be committed.
 
-To run the complete example in Docker, publish the endpoint container images and start the Compose environment from the root folder:
-
 The initial run will pull several containers required to run the demo. See [Ports](#ports) for the host ports these containers expose — make sure they are free before starting.
+
+To run the complete example in Docker, publish the endpoint container images and start the Compose environment from the root folder:
 
 ```shell
 dotnet publish src/AzureLoanBrokerShowcase.slnx -c Release --os linux /t:PublishContainer -m:1
@@ -61,7 +61,7 @@ docker compose up -d
 
 The `dotnet publish` command builds projects and publishes Linux container images to the local Docker registry using the .NET SDK built-in container support. The Docker Compose command starts those endpoint images and configures all the additional infrastructural containers.
 
-To stop the running solution and remove all deployed containers. Using a command prompt, execute the following command:
+To stop the running solution and remove all deployed containers, execute the following command from a command prompt:
 
 ```shell
 docker compose down
@@ -118,11 +118,76 @@ docker compose -f docker-compose-ASB-emulator.yml down
 
 ### Running endpoints from the IDE
 
-If you prefer to start the endpoints from your IDE to debug the code, execute the following command from a command prompt in the root directory to start the required infrastructure:
+If you prefer to start the endpoints from your IDE to debug the code, the infrastructure (SQL Server, credit bureau, Particular platform, and observability containers) runs in Docker while the endpoints run on your machine.
 
-```shell
-docker compose --profile infrastructure up -d
+**One-time setup**
+
+You need to provide your Azure Service Bus connection string in two places:
+
+- Put it in the `.env` file in the root folder (create it from `.env.example`). Docker Compose uses it for the infrastructure containers, because ServiceControl connects to the same Azure Service Bus namespace.
+- Set it as a user-level environment variable named `AZURE_SERVICE_BUS_CONNECTION_STRING`, then restart your IDE so it picks up the change. The endpoints you start from the IDE read it from there. Do not put it in `launchSettings.json`, because that file is committed to source control.
+
+  ```powershell
+  [Environment]::SetEnvironmentVariable("AZURE_SERVICE_BUS_CONNECTION_STRING", "<your connection string>", "User")
+  ```
+
+You also need to add the connection details for the SQL Server and credit bureau containers to the launch profiles. The `.env` and `env/*.env` files are only used by the Docker containers, and their host names (for example, `sqlserver` and `creditbureau`) do not resolve from your machine. In the `Properties/launchSettings.json` of each endpoint project (Client, LoanBroker, Bank1Adapter, Bank2Adapter, Bank3Adapter, and EmailSender), add `SQL_CONNECTION_STRING` under `environmentVariables`. In the LoanBroker project, also add `CREDIT_BUREAU_URL`:
+
+```json
+"environmentVariables": {
+  "DOTNET_ENVIRONMENT": "Development",
+  "SQL_CONNECTION_STRING": "Server=localhost,1433;Database=NServiceBus;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;",
+  "CREDIT_BUREAU_URL": "http://localhost:7071/api/score"
+}
 ```
+
+The password is the demo `sa` password that the SQL Server container is created with in `docker-compose.yml`. Only LoanBroker reads `CREDIT_BUREAU_URL`.
+
+**Run the endpoints**
+
+1. Start the infrastructure from a command prompt in the root directory and wait for the containers to become healthy:
+
+   ```shell
+   docker compose --profile infrastructure up -d
+   ```
+
+   This starts the following containers, but not the endpoint containers (Client, LoanBroker, Bank1/2/3, EmailSender):
+
+   | Container | Purpose | Host port |
+   |-----------|---------|-----------|
+   | `sqlserver` | SQL Server for NServiceBus persistence. Creates the `NServiceBus` database. | 1433 |
+   | `creditbureau` | Credit bureau service (Azure Functions) called by LoanBroker | 7071 |
+   | `servicecontrol` | Particular platform: ServiceControl primary instance | 33333 |
+   | `servicecontrol-db` | RavenDB database for ServiceControl | 8080 |
+   | `servicecontrol-audit` | Particular platform: ServiceControl Audit instance | 44444 |
+   | `servicecontrol-monitoring` | Particular platform: ServiceControl Monitoring instance | 33633 |
+   | `servicepulse` | Particular platform: ServicePulse web UI | 9999 |
+   | `otel-collector` | OpenTelemetry Collector that receives the endpoints' metrics and traces | 4317, 5318, 1234 |
+   | `prometheus` | Metrics storage | 19090 |
+   | `grafana` | Dashboards | 3000 |
+   | `jaeger` | Distributed tracing UI | 16686 |
+
+2. Start the Client, LoanBroker, Bank1Adapter, Bank2Adapter, Bank3Adapter, and EmailSender projects (for example, by configuring multiple startup projects in Visual Studio).
+
+3. In the Client console window, press `F` to send a single loan request, or `L` to send one every second (`S` stops the repeat sends). Unlike the Docker setup, the Client does not send requests automatically when started from the IDE.
+
+> [!IMPORTANT]
+> Do not run the endpoint containers (`docker compose up -d`) at the same time as the endpoints in the IDE. Both would compete for messages from the same queues. Run `docker compose down` first if the full Docker setup is running.
+
+The variables used by the endpoints and their values when running from the IDE are:
+
+| Variable | Used by | IDE value |
+|----------|---------|-----------|
+| `AZURE_SERVICE_BUS_CONNECTION_STRING` | All endpoints | Your connection string (user environment variable, see one-time setup) |
+| `SQL_CONNECTION_STRING` | All endpoints | `Server=localhost,1433;Database=NServiceBus;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;` (the SQL Server container) |
+| `CREDIT_BUREAU_URL` | LoanBroker | `http://localhost:7071/api/score` (the credit bureau container) |
+| `OTLP_METRICS_URL`, `OTLP_TRACING_URL` | All endpoints | Not required. They default to the OpenTelemetry collector on `localhost:5318`. |
+
+The endpoints create their tables in the `NServiceBus` database on first start. The database itself is created by the SQL Server container.
+
+To use a SQL Server instance installed on your machine instead of the container, create an empty `NServiceBus` database and set `SQL_CONNECTION_STRING` to, for example, `Server=localhost;Database=NServiceBus;Integrated Security=True;TrustServerCertificate=True;`. Remove the `SQL_CONNECTION_STRING` entries from the `launchSettings.json` files, because they take precedence over user environment variables.
+
+Once the endpoints are running, open ServicePulse at <http://localhost:9999> to monitor them.
 
 ### Ports
 
@@ -219,4 +284,10 @@ The example deploys three pre-configured Grafana dashboards:
 - The [NServiceBus](http://localhost:3000/d/MHqYOIqnz/nservicebus?orgId=1&refresh=5s) dashboard shows the metrics related to message fetches, processing, and failures, grouped by endpoints or message type.
 
 > [!NOTE]
-> After running the solution multiple times, it might happen that Grafana suddenly shows random data instead of the expected metrics. To reset dashboards, tear down all containers and delete the `data-grafana` and `data-prometheus` folders from the solution folder. Redeploy the containers.
+> After running the solution multiple times, it might happen that Grafana suddenly shows random data instead of the expected metrics. To reset dashboards, tear down all containers, delete the Grafana and Prometheus Docker volumes, and redeploy the containers:
+>
+> ```shell
+> docker compose down
+> docker volume rm loanbroker_grafana-data loanbroker_prometheus-data
+> docker compose up -d
+> ```
