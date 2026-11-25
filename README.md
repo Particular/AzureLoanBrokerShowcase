@@ -52,7 +52,7 @@ To run the complete example in Docker, publish the endpoint container images and
 The initial run will pull several containers required to run the demo. See [Ports](#ports) for the host ports these containers expose — make sure they are free before starting.
 
 ```shell
-dotnet publish src/AzureLoanBrokerShowcase.slnx -c Release --os linux /t:PublishContainer
+dotnet publish src/AzureLoanBrokerShowcase.slnx -c Release --os linux /t:PublishContainer -m:1
 docker compose up -d
 ```
 
@@ -72,6 +72,31 @@ To run the solution without rebuilding container images, execute the following c
 ```shell
 docker compose up -d
 ```
+
+#### Troubleshooting on Windows
+
+- If `dotnet publish` fails, delete the `%TEMP%\Containers\ContentStore` folder and run the command again.
+  ```shell
+  dotnet publish src/AzureLoanBrokerShowcase.slnx -c Release --os linux /t:PublishContainer -m:1
+  docker compose up -d
+  ```
+
+- If `docker compose up` fails with `ports are not available` and `An attempt was made to access a socket in a way forbidden by its access permissions` error, it could be that Windows has reserved the port, even though no application is using it. List the reserved ranges with:
+
+  ```shell
+  netsh interface ipv4 show excludedportrange protocol=tcp
+  ```
+
+  To use a different host port, create a `docker-compose.override.yml` file in the root folder. Docker Compose applies it automatically. For example, to expose Prometheus on port 19090 instead of 9090:
+
+  ```yaml
+  services:
+    prometheus:
+      ports: !override
+        - '19090:9090'
+  ```
+
+  Do not commit the override file.
 
 ### Running with Aspire
 
@@ -131,7 +156,7 @@ The Particular Platform license is read from `license.xml` in the usual [license
 To run the cut down version of the showcase with the Azure Service Bus Emulator, execute the following command from the root folder:
 
 ```shell
-dotnet publish src/AzureLoanBrokerShowcase.slnx -c Release --os linux /t:PublishContainer
+dotnet publish src/AzureLoanBrokerShowcase.slnx -c Release --os linux /t:PublishContainer -m:1
 docker compose -f docker-compose-ASB-emulator.yml up -d
 ```
 
